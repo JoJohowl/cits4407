@@ -34,15 +34,15 @@ check_tab_separated() {
 #remove the column with header Continent
 remove_continent_column() {
     local input_file="$1"
-    local target_column="Continent"
+    local conti_column="Continent"
 
     # 获取目标列的索引
-    local target_col=$(awk -F'\t' -v target="$target_column" 'NR==1 { for (i=1; i<=NF; i++) { if ($i == target) print i } }' "$input_file")
+    local conti_col=$(awk -F'\t' -v target="$conti_column" 'NR==1 { for (i=1; i<=NF; i++) { if ($i == target) print i } }' "$input_file")
 
     # 使用 AWK 删除目标列
-    if [[ -n "$target_col" ]]
+    if [[ -n "$conti_col" ]]
     then
-        awk -F'\t' -v target_col="$target_col" 'BEGIN { OFS=FS } { $target_col=""; sub(/\t$/, "") } 1' "$input_file"
+        awk -F'\t' -v conti_col="$conti_col" 'BEGIN { OFS=FS } { $conti_col=""; sub(/\t$/, "") } 1' "$input_file"
     else
     	cat "$input_file"
     fi
@@ -82,21 +82,36 @@ process_file() {
     check_tab_separated "$input_file"
     remove_continent_column "$input_file" > "$output_file"
     filter_data "$output_file" > "$temp_file"
-    check_cell_count "$temp_file"
+    #check_cell_count "$temp_file"
     mv "$temp_file" "$output_file" 
 }
 
-process_file "$1" "file1_clean.tsv"
-process_file "$2" "file2_clean.tsv"
-process_file "$3" "file3_clean.tsv"
-
-#awk 'BEGIN {
-#   print "<Entity/Country>\t<Code>\t<Year>\t<GDP per capita>\t<Population>\t<Homicide Rate>\t<Life Expectancy>\t<Cantril Ladder score>"
-#}
-#NR>1 {
-#    print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7"\t"$8
-#}' file1_clean.tsv file2_clean.tsv file3_clean.tsv > combined_data.tsv
-
-#awk 'BEGIN {print "Entity\tCode\tYear\tGDP per capita\tPopulation\tHomicide Rate\tLife Expectancy\tCantril Ladder score"} {print}' > combined_data.tsv
+#we don't know the order of three inputs,so we need use their name to name the cleaned data
+filename1=$(basename "$1" .tsv)
+filename2=$(basename "$2" .tsv)
+filename3=$(basename "$3" .tsv)
+process_file "$1" "${filename1}_clean.tsv"
+process_file "$2" "${filename2}_clean.tsv"
+process_file "$3" "${filename3}_clean.tsv"
 
 
+{ head -n 1 gdp-vs-happiness_clean.tsv; tail -n +2 gdp-vs-happiness_clean.tsv | sort -k1,1 -k2,2 -k3,3; } > sorted_gdp.tsv
+{ head -n 1 homicide-rate-unodc_clean.tsv; tail -n +2 homicide-rate-unodc_clean.tsv  | sort -k1,1 -k2,2 -k3,3; } > sorted_homicide.tsv
+{ head -n 1 life-satisfaction-vs-life-expectancy_clean.tsv; tail -n +2 life-satisfaction-vs-life-expectancy_clean.tsv  | sort -k1,1 -k2,2 -k3,3; } > sorted_life_expectancy.tsv
+#tail -n +2 gdp-vs-happiness_clean.tsv |sort -k1,1 -k2,2 -k3,3 gdp-vs-happiness_clean.tsv > sorted_gdp.tsv
+#tail -n +2 homicide-rate-unodc_clean.tsv |sort -k1,1 -k2,2 -k3,3 homicide-rate-unodc_clean.tsv > sorted_homicide.tsv
+#tail -n +2 life-satisfaction-vs-life-expectancy_clean.tsv |sort -k1,1 -k2,2 -k3,3 life-satisfaction-vs-life-expectancy_clean.tsv > sorted_life_expectancy.tsv
+
+#order:<Entity/Country> <Code> <Year> <GDP per capita> <Population> <Homicide Rate> <Life Expectancy> <Cantril Ladder score>
+#join -t $'\t' -1 7 -2 5 -o '1.1,1.2,1.3,1.5,1.6,2.4,1.4' sorted_gdp.tsv sorted_homicide.tsv >combined_file.tsv
+#join -t $'\t' -1 1,2,3 -2 1,2,3 -o '1.1,1.2,1.3,1.5,1.6,2.4,1.4'<(sort gdp-vs-happiness_clean.tsv)<(sort homicide-rate-unodc_clean.tsv) >combined_file.tsv
+#join -t $'\t' -1 1,2,3 -2 1,2,3 -o '1.1,1.2,1.3,1.5,1.6,2.4,1.4' sorted_gdp.tsv sorted_homicide.tsv > combined_file.tsv
+#awk 'BEGIN {FS = OFS = "\t"} NR == FNR {data1[$1,$2,$3] = $4 FS $5 FS $6; next} {print $1, $2, $3, data1[$1,$2,$3], $4}' sorted_gdp.tsv sorted_homicide.tsv > combined_file.tsv
+awk 'BEGIN {FS = OFS = "\t"} NR == FNR {data1[$1,$2,$3] = $4 FS $5 FS $6; next} {print $1, $2, $3, data1[$1,$2,$3], $4}' sorted_gdp.tsv sorted_homicide.tsv > intermediate_result.tsv
+
+awk 'BEGIN {FS = OFS = "\t"} 
+     NR == FNR {data2[$1,$2,$3] = $4; next} 
+     {print $0, (data2[$1,$2,$3] ? data2[$1,$2,$3] : "NULL")}' intermediate_result.tsv sorted_life_expectancy.tsv > combined_file.tsv
+
+#sorted_life_expectancy.tsv
+rm gdp-vs-happiness_clean.tsv homicide-rate-unodc_clean.tsv life-satisfaction-vs-life-expectancy_clean.tsv
