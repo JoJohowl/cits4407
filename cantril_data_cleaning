@@ -1,0 +1,102 @@
+#!/bin/bash
+#Author: Zihao Wang,24284623
+#input: three:homicide-rate-unodc.tsv,life-satisfaction-vs-life-expectancy.tsv, gdp-vs-happiness.tsv,any order
+#output:tab-separated data directed,to standard output.
+
+#check if the number of the arguments is correct
+if [[ "$#" -ne 3 ]]
+then
+    echo "Usage: $0 <homicide-rate-unodc.tsv> <life-satisfaction-vs-life-expectancy.tsv> <gdp-vs-happiness.tsv>,any order" >/dev/stderr
+    exit 1
+fi
+
+#check if can't find the file or has zero length
+for file in "$1" "$2" "$3"
+do
+	if [[ ! -s "$file" ]]
+	then
+		echo "The named input file $1 or $2 or $3 does not exist or has zero length" >/dev/stderr
+		exit 1
+	fi
+done
+
+
+#check if files are tab-separated foramt
+check_tab_separated() {
+    header=$(head -n 1 "$1")
+    if [[ ! "$header" == *$'\t'* ]]
+    then
+        echo "$1 is not a tab-separated foramt file,check it" >/dev/stderr
+        exit 1
+    fi
+}
+
+#remove the column with header Continent
+remove_continent_column() {
+    local input_file="$1"
+    local target_column="Continent"
+
+    # 获取目标列的索引
+    local target_col=$(awk -F'\t' -v target="$target_column" 'NR==1 { for (i=1; i<=NF; i++) { if ($i == target) print i } }' "$input_file")
+
+    # 使用 AWK 删除目标列
+    if [[ -n "$target_col" ]]
+    then
+        awk -F'\t' -v target_col="$target_col" 'BEGIN { OFS=FS } { $target_col=""; sub(/\t$/, "") } 1' "$input_file"
+    else
+    	cat "$input_file"
+    fi
+}
+
+filter_data() {
+    awk -F'\t' 'NR==1 {
+        for (i=1; i<=NF; i++) {
+            if ($i == "Code") code_col=i
+            if ($i == "Year") year_col=i
+        }
+        print
+    }
+    NR>1 {
+        if ($code_col != "" && $year_col >= 2011 && $year_col <= 2021) {
+            print
+        }
+    }' "$1"
+}
+
+#count how many numbers in each line
+check_cell_count() {
+    local file=$1
+    local header_count=$(awk -F'\t' 'NR==1 {print NF}' "$file")
+
+    awk -F'\t' -v header_count="$header_count" 'NR>1 && NF != header_count {
+        print "Line " NR " in file " FILENAME " does not have the correct number of cells." > "/dev/stderr"
+    }' "$file"
+}
+
+
+process_file() {
+    local input_file=$1
+    local output_file=$2
+    local temp_file=$(mktemp)
+
+    check_tab_separated "$input_file"
+    remove_continent_column "$input_file" > "$output_file"
+    filter_data "$output_file" > "$temp_file"
+    check_cell_count "$temp_file"
+    mv "$temp_file" "$output_file" 
+}
+
+process_file "$1" "file1_clean.tsv"
+process_file "$2" "file2_clean.tsv"
+process_file "$3" "file3_clean.tsv"
+
+#awk 'BEGIN {
+#   print "<Entity/Country>\t<Code>\t<Year>\t<GDP per capita>\t<Population>\t<Homicide Rate>\t<Life Expectancy>\t<Cantril Ladder score>"
+#}
+#NR>1 {
+#    print $1"\t"$2"\t"$3"\t"$4"\t"$5"\t"$6"\t"$7"\t"$8
+#}' file1_clean.tsv file2_clean.tsv file3_clean.tsv > combined_data.tsv
+
+#awk 'BEGIN {print "Entity\tCode\tYear\tGDP per capita\tPopulation\tHomicide Rate\tLife Expectancy\tCantril Ladder score"} {print}' > combined_data.tsv
+
+
