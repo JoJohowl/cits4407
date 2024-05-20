@@ -69,10 +69,11 @@ filter_data() {
 #count how many numbers in each line
 check_cell_count() {
     local file=$1
+    #get the number of columns in first line
     local header_count=$(awk -F'\t' 'NR==1 {print NF}' "$file")
-
+    #check each lines'number except first line
     awk -F'\t' -v header_count="$header_count" 'NR>1 && NF != header_count {
-        print "Line " NR " in file " FILENAME " does not have the correct number of cells." > "/dev/stderr"
+        print "Line " NR " in " FILENAME " has the wrong number of cells." > "/dev/stderr"
     }' "$file"
 }
 
@@ -80,7 +81,7 @@ check_cell_count() {
 process_file() {
     local input_file=$1
     local output_file=$2
-#set a temperary veriable
+#set a temporary file for ease of handling
     local temp_file=$(mktemp)
 
     check_tab_separated "$input_file"
@@ -98,21 +99,24 @@ process_file "$1" "${filename1}_clean.tsv"
 process_file "$2" "${filename2}_clean.tsv"
 process_file "$3" "${filename3}_clean.tsv"
 
-
+#get the first line (header),and sort the data from the second line use the first three cells
 { head -n 1 gdp-vs-happiness_clean.tsv; tail -n +2 gdp-vs-happiness_clean.tsv | sort -k1,1 -k2,2 -k3,3; } > sorted_gdp.tsv
 { head -n 1 homicide-rate-unodc_clean.tsv; tail -n +2 homicide-rate-unodc_clean.tsv  | sort -k1,1 -k2,2 -k3,3; } > sorted_homicide.tsv
 { head -n 1 life-satisfaction-vs-life-expectancy_clean.tsv; tail -n +2 life-satisfaction-vs-life-expectancy_clean.tsv  | sort -k1,1 -k2,2 -k3,3; } > sorted_life_expectancy.tsv
 
 #order:<Entity/Country> <Code> <Year> <GDP per capita> <Population> <Homicide Rate> <Life Expectancy> <Cantril Ladder score>
-#join -t $'\t' -1 7 -2 5 -o '1.1,1.2,1.3,1.5,1.6,2.4,1.4' sorted_gdp.tsv sorted_homicide.tsv >combined_file.tsv
-#join -t $'\t' -1 1,2,3 -2 1,2,3 -o '1.1,1.2,1.3,1.5,1.6,2.4,1.4'<(sort gdp-vs-happiness_clean.tsv)<(sort homicide-rate-unodc_clean.tsv) >combined_file.tsv
-#join -t $'\t' -1 1,2,3 -2 1,2,3 -o '1.1,1.2,1.3,1.5,1.6,2.4,1.4' sorted_gdp.tsv sorted_homicide.tsv > combined_file.tsv
-#awk 'BEGIN {FS = OFS = "\t"} NR == FNR {data1[$1,$2,$3] = $4 FS $5 FS $6; next} {print $1, $2, $3, data1[$1,$2,$3], $4}' sorted_gdp.tsv sorted_homicide.tsv > combined_file.tsv
-awk 'BEGIN {FS = OFS = "\t"} NR == FNR {data1[$1,$2,$3] = $4 FS $5 FS $6; next} {print $1, $2, $3, data1[$1,$2,$3], $4}' sorted_gdp.tsv sorted_homicide.tsv > intermediate_result.tsv
 
+#combine the sorted files,combine two at one time
+awk 'BEGIN {FS = OFS = "\t"}
+     NR == FNR {data1[$1,$2,$3] = $4 ; next} 
+     {print $0, data1[$1,$2,$3] }' sorted_homicide.tsv sorted_gdp.tsv > middle_result.tsv
+#for gdp $4:Cantril ladder score,$5:GDP,$6:Population ,for sorted_homicide $4:Homicide
 awk 'BEGIN {FS = OFS = "\t"} 
-     NR == FNR {data2[$1,$2,$3] = $4; next} 
-     {print $0, (data2[$1,$2,$3] ? data2[$1,$2,$3] : "NULL")}' intermediate_result.tsv sorted_life_expectancy.tsv > combined_file.tsv
+     NR == FNR {data2[$1,$2,$3] = $1 "\t" $2 "\t" $3 "\t" $5 "\t" $6 "\t" $7; data3[$1,$2,$3] = $4 ; next} 
+     {print data2[$1,$2,$3],$4 ,data3[$1,$2,$3]  }' middle_result.tsv sorted_life_expectancy.tsv
+#$4:Life expectancy
 
-#sorted_life_expectancy.tsv
-rm gdp-vs-happiness_clean.tsv homicide-rate-unodc_clean.tsv life-satisfaction-vs-life-expectancy_clean.tsv
+
+#clean the file not used in the future
+rm gdp-vs-happiness_clean.tsv homicide-rate-unodc_clean.tsv life-satisfaction-vs-life-expectancy_clean.tsv 
+rm sorted_gdp.tsv sorted_homicide.tsv sorted_life_expectancy.tsv middle_result.tsv
