@@ -1,4 +1,110 @@
 #!/bin/bash
 #Author: Zihao Wang,24284623
 #input: the cleaned datafile produced by cantril_data_cleaning
-#output:
+#output:Mean correlation of 4 predictors with Cantril ladder,and largest absolute value.
+
+input_file="$1"
+output_file="filtered_file.tsv"
+
+
+
+#check if the number of the arguments is correct
+if [[ "$#" -ne 1 ]]
+then
+    echo "Usage: $0 <filted_file>" >/dev/stderr
+    exit 1
+fi
+
+#data clean,filter the data which has less than 3 predictor-value,without Cantril-value
+awk 'BEGIN {FS = OFS = "\t"} 
+NR > 1 {
+    predictor_num = 0
+    for (i = 4; i <= 7; i++) {
+        if ($i != "") {
+            predictor_num++
+        }
+    }
+    if (predictor_num >= 3 && $8 != "") {
+        print
+    }
+}' "$input_file" > "$output_file"
+
+awk '
+function calculate_mean_correlation(x, y, n) {
+    sumX = sumY = sumXY = sumX2 = sumY2 = 0
+    for (i = 1; i <= n; i++) {
+        if (x[i] != "" && y[i] != "") {
+            sumX += x[i]
+            sumY += y[i]
+            sumXY += (x[i] * y[i])
+            sumX2 += (x[i] * x[i])
+            sumY2 += (y[i] * y[i])
+        }
+    }
+    if (n > 0) {
+        meanX = sumX / n
+        meanY = sumY / n
+        numerator = sumXY - n * meanX * meanY
+        denominator = sqrt((sumX2 - n * meanX * meanX) * (sumY2 - n * meanY * meanY))
+        if (denominator != 0) {
+            return numerator / denominator
+        } else {
+            return "denominator is zero,check the data"
+        }
+    } else {
+        return "No data,check again"
+    }
+}
+
+BEGIN {FS = OFS = "\t"} 
+{
+    x6[NR] = $6
+    y8[NR] = $8
+    x4[NR] = $4
+    x5[NR] = $5
+    x7[NR] = $7
+}
+END {
+# Number of data rows
+    n = NR  
+    
+#calculate the Mean correlation of Homicide Rate $6 with Cantril ladder$8
+    correlation6_8 = calculate_mean_correlation(x6, y8, n)
+
+#calculate the Mean correlation of GDP $4 with Cantril ladder$8
+    correlation4_8 = calculate_mean_correlation(x4, y8, n)
+
+#calculate the Mean correlation of Population $5with Cantril ladder$8    
+    correlation5_8 = calculate_mean_correlation(x5, y8, n)
+
+#calculate the Mean correlation of Life Expectancy $7with Cantril ladder$8
+    correlation7_8 = calculate_mean_correlation(x7, y8, n)
+    
+    #compare and pick the largest 
+    max_abs_corr = abs(correlation6_8)
+    max_corr=correlation6_8
+    name = "Homicide Rate"
+    if (abs(correlation4_8) > max_abs_corr) {
+        max_abs_corr = abs(correlation4_8)
+        max_corr=correlation4_8
+        name = "GDP"
+    }
+    if (abs(correlation5_8) > max_abs_corr) {
+        max_abs_corr = abs(correlation5_8)
+        max_corr=correlation5_8
+        name = "Population"
+    }
+    if (abs(correlation7_8) > max_abs_corr) {
+        max_abs_corr = abs(correlation7_8)
+        max_corr=correlation7_8
+        name = "Life Expectancy"
+    }
+    
+    print "Mean correlation of Homicide Rate with Cantril ladder is",correlation6_8
+    "Mean correlation of GDP with Cantril ladder is",correlation4_8
+    "Mean correlation of Population with Cantril ladder is",correlation5_8
+    "Mean correlation of Life Expectancy with Cantril ladder is",correlation7_8
+    "Most predictive mean correlation with the Cantril ladder is",name,"(r="max_corr")"
+}' "$input_file"
+
+
