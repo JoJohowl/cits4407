@@ -1,0 +1,4 @@
+#!/bin/bash
+#Author: Zihao Wang,24284623
+#input: the cleaned datafile produced by cantril_data_cleaning
+#output:
